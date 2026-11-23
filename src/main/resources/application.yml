@@ -22,3 +22,7 @@ spring:
 stripe:
   secret-key: ${STRIPE_SECRET_KEY}
   webhook-secret: ${STRIPE_WEBHOOK_SECRET}
+
+# Public URL of this app; Stripe redirects customers back here after checkout.
+app:
+  base-url: ${APP_BASE_URL:http://localhost:8080}

@@ -45,6 +45,10 @@ public class Order {
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
+    // Stripe session id ("cs_test_..."); the webhook uses it to find the order.
+    @Column(unique = true)
+    private String stripeCheckoutSessionId;
+
     protected Order() {
     }
 
@@ -55,6 +59,15 @@ public class Order {
         this.currency = currency;
         this.status = OrderStatus.PENDING; // every order starts as PENDING
         this.createdAt = Instant.now();
+    }
+
+    // Can be set only once.
+    public void attachStripeCheckoutSession(String checkoutSessionId) {
+        if (this.stripeCheckoutSessionId != null) {
+            throw new IllegalStateException(
+                    "Order " + id + " already has a Stripe Checkout Session");
+        }
+        this.stripeCheckoutSessionId = checkoutSessionId;
     }
 
     // Status changes (PAID, REFUNDED, ...) come in M5/M6.
@@ -85,5 +98,17 @@ public class Order {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public String getStripeCheckoutSessionId() {
+        return stripeCheckoutSessionId;
+    }
+
+    public void markCancelled() {
+        if (this.status != OrderStatus.PENDING) {
+            throw new IllegalStateException(
+                    "Order " + id + " cannot be cancelled because it is " + status);
+        }
+        this.status = OrderStatus.CANCELLED;
     }
 }
