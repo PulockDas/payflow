@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PayFlow - Payment</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 480px; margin: 48px auto; padding: 0 16px; color: #222; }
+        .status { padding: 16px; border-radius: 8px; background: #f3f4f6; }
+        .status.paid { background: #e7f6ec; }
+        .status.problem { background: #fdecec; }
+        .muted { color: #666; }
+    </style>
+</head>
+<body>
+    <h1>Thank you!</h1>
+    <div id="status-box" class="status">Loading your order…</div>
+    <p id="order-details" class="muted"></p>
+    <p><a href="/">Back to shop</a></p>
+
+    <script>
+        const POLL_INTERVAL_MS = 2000;
+        const MAX_POLL_ATTEMPTS = 15; // ~30 seconds
+
+        const statusBox = document.getElementById("status-box");
+        const orderDetails = document.getElementById("order-details");
+        const checkoutSessionId = new URLSearchParams(location.search).get("session_id");
+
+        let pollAttempts = 0;
+
+        function showStatus(message, cssClass) {
+            statusBox.textContent = message;
+            statusBox.className = "status " + (cssClass || "");
+        }
+
+        // Display only: the amount itself always stays in cents.
+        function formatAmount(amountCents, currency) {
+            return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() })
+                .format(amountCents / 100);
+        }
+
+        async function checkOrderStatus() {
+            pollAttempts++;
+            try {
+                const response = await fetch("/api/orders/by-session/" + encodeURIComponent(checkoutSessionId));
+                if (response.status === 404) {
+                    showStatus("We couldn't find this order.", "problem");
+                    return;
+                }
+                if (!response.ok) {
+                    throw new Error("HTTP " + response.status);
+                }
+
+                const order = await response.json();
+                orderDetails.textContent = "Order #" + order.orderId + ": " + order.quantity + " × "
+                    + order.productName + " (" + formatAmount(order.amountCents, order.currency) + ")";
+
+                if (order.status === "PAID") {
+                    showStatus("Payment confirmed. Your order is paid.", "paid");
+                } else if (order.status === "PENDING") {
+                    if (pollAttempts < MAX_POLL_ATTEMPTS) {
+                        showStatus("Confirming your payment…");
+                        setTimeout(checkOrderStatus, POLL_INTERVAL_MS);
+                    } else {
+                        showStatus("Your payment is still being processed. Please check back in a few minutes.");
+                    }
+                } else {
+                    showStatus("Order status: " + order.status, "problem");
+                }
+            } catch (error) {
+                showStatus("Could not load your order. Please refresh the page.", "problem");
+            }
+        }
+
+        if (checkoutSessionId) {
+            checkOrderStatus();
+        } else {
+            showStatus("Missing checkout session.", "problem");
+        }
+    </script>
+</body>
+</html>

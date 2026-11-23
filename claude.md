@@ -13,22 +13,28 @@ one plain HTML page as the shop. Build tool: Maven.
 - M1 Project skeleton: Spring Boot + Postgres + config from env vars + /health (done)
 - M2 Product and Order entities, OrderStatus lifecycle, GET /api/products (done)
 - M3 POST /api/checkout creates an Order (PENDING) + Stripe Checkout Session (done)
-- M4 Success / cancel pages that READ order status from the DB
+- M4 Success / cancel pages that READ order status from the DB (done)
 - M5 Webhook endpoint: signature verification, idempotent event handling, Order -> PAID
 - M6 Refunds with Stripe idempotency keys, Order -> REFUNDED
 - M7 Tests, Dockerfile, README
 - M8 GitHub polish + resume
 
 ## Current status
-- M0-M3 done and committed (one commit per milestone). Next: M4.
+- M0-M4 done and committed (one commit per milestone). Next: M5.
+- Frontend: static files in `resources/static/` (no template engine): `index.html`
+  (shop), `checkout/success.html` (polls every 2s, max 15, while PENDING),
+  `checkout/cancel.html`. DOM built with `textContent`, never `innerHTML`.
+- Read-only order API (`controller/OrderController`): `GET /api/orders/by-session/{id}`,
+  `GET /api/orders/{id}` -> `OrderStatusResponse`. `OrderRepository` methods use
+  `@EntityGraph(attributePaths = "product")`.
 - Decisions: Spring Boot 4.2 (no 3.x offered by Initializr), Java 21, Stripe
   sandbox account, `ddl-auto: update` (no Flyway/Liquibase).
 - Service layer: only `checkout/CheckoutService` (DB + Stripe). No `@Transactional`
   around Stripe calls (don't hold a DB transaction during an external API call).
 - Stripe Session uses inline `price_data` from our DB, `client_reference_id` = order id;
   the order stores `stripeCheckoutSessionId` (unique) for the M5 webhook lookup.
-- Return URLs: `/checkout/success?session_id={CHECKOUT_SESSION_ID}` and
-  `/checkout/cancel?order_id=...` (pages built in M4).
+- Return URLs: `/checkout/success.html?session_id={CHECKOUT_SESSION_ID}` and
+  `/checkout/cancel.html?order_id=...` (static pages in `resources/static/checkout/`).
 - `Order` status methods so far: `markCancelled()` (PENDING only, I wrote it; used when
   Stripe session creation fails). PAID/REFUNDED transitions: I write them in M5/M6.
 - Config: `application.yml` imports `.env` via `spring.config.import`;

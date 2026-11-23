@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PayFlow Shop</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 640px; margin: 48px auto; padding: 0 16px; color: #222; }
+        .product { display: flex; align-items: center; gap: 12px; padding: 16px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 12px; }
+        .product-info { flex: 1; }
+        .product-name { font-weight: 600; }
+        .muted { color: #666; }
+        .error { color: #b00020; }
+        input[type=number] { width: 56px; padding: 6px; }
+        button { padding: 8px 16px; cursor: pointer; }
+        button:disabled { cursor: wait; opacity: 0.6; }
+    </style>
+</head>
+<body>
+    <h1>PayFlow Shop</h1>
+    <p class="muted">Test mode: pay with card 4242 4242 4242 4242, any future date, any CVC.</p>
+    <p id="error-message" class="error"></p>
+    <div id="product-list">Loading products…</div>
+
+    <script>
+        const productList = document.getElementById("product-list");
+        const errorMessage = document.getElementById("error-message");
+
+        // Display only: the amount itself always stays in cents.
+        function formatAmount(amountCents, currency) {
+            return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() })
+                .format(amountCents / 100);
+        }
+
+        // Built with createElement + textContent (never innerHTML) to prevent XSS.
+        function createProductRow(product) {
+            const row = document.createElement("div");
+            row.className = "product";
+
+            const info = document.createElement("div");
+            info.className = "product-info";
+            const name = document.createElement("div");
+            name.className = "product-name";
+            name.textContent = product.name;
+            const description = document.createElement("div");
+            description.className = "muted";
+            description.textContent = product.description || "";
+            const price = document.createElement("div");
+            price.textContent = formatAmount(product.priceCents, product.currency);
+            info.append(name, description, price);
+
+            const quantityInput = document.createElement("input");
+            quantityInput.type = "number";
+            quantityInput.min = "1";
+            quantityInput.max = "10";
+            quantityInput.value = "1";
+
+            const buyButton = document.createElement("button");
+            buyButton.textContent = "Buy";
+            buyButton.addEventListener("click",
+                () => startCheckout(product.id, Number(quantityInput.value), buyButton));
+
+            row.append(info, quantityInput, buyButton);
+            return row;
+        }
+
+        async function loadProducts() {
+            try {
+                const response = await fetch("/api/products");
+                if (!response.ok) {
+                    throw new Error("HTTP " + response.status);
+                }
+                const products = await response.json();
+                productList.replaceChildren(...products.map(createProductRow));
+            } catch (error) {
+                productList.textContent = "Could not load products. Please refresh the page.";
+            }
+        }
+
+        // Sends only WHAT to buy. The price is decided by the backend from the database.
+        async function startCheckout(productId, quantity, buyButton) {
+            errorMessage.textContent = "";
+            buyButton.disabled = true; // prevent double clicks creating two orders
+            try {
+                const response = await fetch("/api/checkout", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ productId, quantity })
+                });
+                if (response.status === 400) {
+                    throw new Error("Please choose a quantity between 1 and 10.");
+                }
+                if (!response.ok) {
+                    throw new Error("Checkout failed, please try again.");
+                }
+                const checkout = await response.json();
+                window.location.href = checkout.checkoutUrl; // go to Stripe's payment page
+            } catch (error) {
+                errorMessage.textContent = error.message;
+                buyButton.disabled = false;
+            }
+        }
+
+        loadProducts();
+    </script>
+</body>
+</html>

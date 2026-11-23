@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PayFlow - Checkout cancelled</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 480px; margin: 48px auto; padding: 0 16px; color: #222; }
+        .status { padding: 16px; border-radius: 8px; background: #f3f4f6; }
+        .status.problem { background: #fdecec; }
+        .muted { color: #666; }
+    </style>
+</head>
+<body>
+    <h1>Checkout cancelled</h1>
+    <div id="status-box" class="status">Loading your order…</div>
+    <p id="order-details" class="muted"></p>
+    <p><a href="/">Back to shop</a></p>
+
+    <script>
+        const statusBox = document.getElementById("status-box");
+        const orderDetails = document.getElementById("order-details");
+        const orderId = new URLSearchParams(location.search).get("order_id");
+
+        function showStatus(message, cssClass) {
+            statusBox.textContent = message;
+            statusBox.className = "status " + (cssClass || "");
+        }
+
+        // Display only: the amount itself always stays in cents.
+        function formatAmount(amountCents, currency) {
+            return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() })
+                .format(amountCents / 100);
+        }
+
+        async function loadOrder() {
+            try {
+                const response = await fetch("/api/orders/" + encodeURIComponent(orderId));
+                if (response.status === 404) {
+                    showStatus("We couldn't find this order.", "problem");
+                    return;
+                }
+                if (!response.ok) {
+                    throw new Error("HTTP " + response.status);
+                }
+
+                const order = await response.json();
+                orderDetails.textContent = "Order #" + order.orderId + ": " + order.quantity + " × "
+                    + order.productName + " (" + formatAmount(order.amountCents, order.currency) + ")";
+
+                if (order.status === "PAID") {
+                    // Paid in another tab before cancelling here: show the truth from the DB.
+                    showStatus("This order is already paid.");
+                } else {
+                    showStatus("You were not charged. You can try again from the shop.");
+                }
+            } catch (error) {
+                showStatus("Could not load your order. Please refresh the page.", "problem");
+            }
+        }
+
+        // Order ids are numbers; anything else is a broken link.
+        if (orderId && /^\d+$/.test(orderId)) {
+            loadOrder();
+        } else {
+            showStatus("Missing or invalid order.", "problem");
+        }
+    </script>
+</body>
+</html>

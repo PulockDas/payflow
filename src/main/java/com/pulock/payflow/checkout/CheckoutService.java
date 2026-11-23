@@ -76,9 +76,9 @@ public class CheckoutService {
                 .addLineItem(lineItem)
                 // Our order id, visible on the session in the dashboard and in webhooks.
                 .setClientReferenceId(order.getId().toString())
-                // Stripe fills in {CHECKOUT_SESSION_ID}. These pages come in M4.
-                .setSuccessUrl(appBaseUrl + "/checkout/success?session_id={CHECKOUT_SESSION_ID}")
-                .setCancelUrl(appBaseUrl + "/checkout/cancel?order_id=" + order.getId())
+                // Static pages in resources/static/checkout. Stripe fills in {CHECKOUT_SESSION_ID}.
+                .setSuccessUrl(appBaseUrl + "/checkout/success.html?session_id={CHECKOUT_SESSION_ID}")
+                .setCancelUrl(appBaseUrl + "/checkout/cancel.html?order_id=" + order.getId())
                 .build();
 
         try {
