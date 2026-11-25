@@ -111,4 +111,12 @@ public class Order {
         }
         this.status = OrderStatus.CANCELLED;
     }
+
+    public void markPaid() {
+        if (this.status != OrderStatus.PENDING) {
+            throw new IllegalStateException(
+                    "Order " + id + " cannot be marked as paid because it is " + status);
+        }
+        this.status = OrderStatus.PAID;
+    }
 }

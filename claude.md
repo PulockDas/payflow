@@ -20,7 +20,12 @@ one plain HTML page as the shop. Build tool: Maven.
 - M8 GitHub polish + resume
 
 ## Current status
-- M0-M4 done and committed (one commit per milestone). Next: M5.
+- M0-M4 done and committed (one commit per milestone).
+- M5 code written and committed as WIP, NOT yet tested. Next: run the M5 test
+  checklist (VS Code launch "PayFlow (DB + Stripe + app)" + `test:` tasks), then mark
+  M5 done, quiz, and commit. Webhook: `webhook/StripeWebhookController` (signature
+  check) + `webhook/StripeWebhookService` (I wrote it: idempotency via
+  `processed_stripe_events` + `saveAndFlush`, completed -> PAID, expired -> CANCELLED).
 - Frontend: static files in `resources/static/` (no template engine): `index.html`
   (shop), `checkout/success.html` (polls every 2s, max 15, while PENDING),
   `checkout/cancel.html`. DOM built with `textContent`, never `innerHTML`.
