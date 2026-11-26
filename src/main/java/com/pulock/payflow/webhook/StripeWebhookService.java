@@ -6,6 +6,7 @@ import com.pulock.payflow.model.ProcessedStripeEvent;
 import com.pulock.payflow.repository.OrderRepository;
 import com.pulock.payflow.repository.ProcessedStripeEventRepository;
 import com.stripe.exception.EventDataObjectDeserializationException;
+import com.stripe.model.Charge;
 import com.stripe.model.Event;
 import com.stripe.model.EventDataObjectDeserializer;
 import com.stripe.model.StripeObject;
@@ -25,11 +26,13 @@ public class StripeWebhookService {
 
     private static final String CHECKOUT_SESSION_COMPLETED = "checkout.session.completed";
     private static final String CHECKOUT_SESSION_EXPIRED = "checkout.session.expired";
+    private static final String CHARGE_REFUNDED = "charge.refunded";
 
     private final OrderRepository orderRepository;
     private final ProcessedStripeEventRepository processedStripeEventRepository;
 
-    public StripeWebhookService(OrderRepository orderRepository, ProcessedStripeEventRepository processedStripeEventRepository) {
+    public StripeWebhookService(OrderRepository orderRepository,
+                                ProcessedStripeEventRepository processedStripeEventRepository) {
         this.orderRepository = orderRepository;
         this.processedStripeEventRepository = processedStripeEventRepository;
     }
@@ -49,12 +52,13 @@ public class StripeWebhookService {
         switch (event.getType()) {
             case CHECKOUT_SESSION_COMPLETED -> handleCheckoutSessionCompleted(event);
             case CHECKOUT_SESSION_EXPIRED -> handleCheckoutSessionExpired(event);
+            case CHARGE_REFUNDED -> handleChargeRefunded(event);
             default -> log.info("Ignoring Stripe event type {}", event.getType());
         }
     }
 
     private void handleCheckoutSessionCompleted(Event event) {
-        Session checkoutSession = extractCheckoutSession(event);
+        Session checkoutSession = extractDataObject(event, Session.class);
 
         // Not ours (e.g. `stripe trigger` test events): log and return 200, so Stripe stops retrying.
         Optional<Order> matchingOrder = orderRepository.findByStripeCheckoutSessionId(checkoutSession.getId());
@@ -87,12 +91,13 @@ public class StripeWebhookService {
 
         order.markPaid();
         // No save() needed: inside @Transactional, Hibernate saves changes to loaded entities on commit.
-        log.info("Order {} marked PAID (session {}, event {})",
-                order.getId(), checkoutSession.getId(), event.getId());
+        order.attachStripePaymentIntent(checkoutSession.getPaymentIntent());
+        log.info("Order {} marked PAID (session {}, event {}, paymentIntent {})",
+                order.getId(), checkoutSession.getId(), event.getId(), checkoutSession.getPaymentIntent());
     }
 
     private void handleCheckoutSessionExpired(Event event) {
-        Session checkoutSession = extractCheckoutSession(event);
+        Session checkoutSession = extractDataObject(event, Session.class);
 
         // Not ours (e.g. `stripe trigger` test events): log and return 200, so Stripe stops retrying.
         Optional<Order> matchingOrder = orderRepository.findByStripeCheckoutSessionId(checkoutSession.getId());
@@ -114,20 +119,61 @@ public class StripeWebhookService {
         }
     }
 
-    private Session extractCheckoutSession(Event event) {
+    // charge.refunded carries a Charge (not a Session); the Charge knows its PaymentIntent.
+    private void handleChargeRefunded(Event event) {
+        Charge refundedCharge = extractDataObject(event, Charge.class);
+        String paymentIntentId = refundedCharge.getPaymentIntent();
+
+        // Not ours (e.g. `stripe trigger` test events): log and return 200.
+        Optional<Order> matchingOrder = orderRepository.findByStripePaymentIntentId(paymentIntentId);
+        if (matchingOrder.isEmpty()) {
+            log.warn("No order for Stripe PaymentIntent {} (event {}), ignoring",
+                    paymentIntentId, event.getId());
+            return;
+        }
+        Order order = matchingOrder.get();
+
+        // charge.refunded also fires for partial refunds; refunded == true means fully refunded.
+        if (!Boolean.TRUE.equals(refundedCharge.getRefunded())) {
+            log.info("Charge {} partially refunded ({} of {} cents); order {} stays {}",
+                    refundedCharge.getId(), refundedCharge.getAmountRefunded(), refundedCharge.getAmount(),
+                    order.getId(), order.getStatus());
+            return;
+        }
+
+        if (order.getStatus() == OrderStatus.REFUNDED) {
+            log.info("Order {} already REFUNDED (event {})", order.getId(), event.getId());
+            return;
+        }
+
+        // Error: Stripe refunded money for an order we don't consider PAID. Needs a human.
+        if (order.getStatus() != OrderStatus.PAID) {
+            log.error("Order {} is {}, cannot mark REFUNDED (charge {}, event {})",
+                    order.getId(), order.getStatus(), refundedCharge.getId(), event.getId());
+            return;
+        }
+
+        order.markRefunded();
+        log.info("Order {} marked REFUNDED (charge {}, paymentIntent {}, event {})",
+                order.getId(), refundedCharge.getId(), paymentIntentId, event.getId());
+    }
+
+    // Reads the event's data object as the given type (Session, Charge, ...).
+    private <T extends StripeObject> T extractDataObject(Event event, Class<T> expectedType) {
         EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
 
         Optional<StripeObject> dataObject = deserializer.getObject();
         if (dataObject.isPresent()) {
-            return (Session) dataObject.get();
+            return expectedType.cast(dataObject.get());
         }
 
         // Empty when the event's API version differs from the SDK's: parse it anyway.
         try {
-            return (Session) deserializer.deserializeUnsafe();
+            return expectedType.cast(deserializer.deserializeUnsafe());
         } catch (EventDataObjectDeserializationException deserializationFailure) {
             throw new IllegalStateException(
-                    "Could not read checkout session from Stripe event " + event.getId(), deserializationFailure);
+                    "Could not read " + expectedType.getSimpleName() + " from Stripe event " + event.getId(),
+                    deserializationFailure);
         }
     }
 }

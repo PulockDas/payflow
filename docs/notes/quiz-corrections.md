@@ -43,6 +43,28 @@ Jackson sees a non-null object and calls its getters, which triggers loading:
 For lists this becomes the **N+1 problem**: 1 query for 100 orders + 100 for their products.
 Fix: DTO + `@EntityGraph(attributePaths = "product")` -> one `JOIN` query, no proxies.
 
+## M5
+**Why read the webhook body as a raw `String`?**
+I said: for the signature, and we may not know the body's structure. Second part wrong:
+we know it (a Stripe `Event`, the SDK parses it).
+Real reason: the signature is an HMAC over the **exact bytes** Stripe sent. Parsing then
+re-serializing can change spacing / key order / number format -> different bytes ->
+genuine events fail. Verify raw bytes first, *then* parse (`Webhook.constructEvent`).
+
+**Completed event for an order that's already PAID: why 200, not 500?**
+I said: 500 makes Stripe retry. True, but the *why*: **a retry can't fix it**, the order
+stays PAID forever. 500 = up to 3 days of identical failing deliveries + noise, and Stripe
+may flag/disable a constantly failing endpoint. 200 = "received, nothing to do" + `log.error`
+so a human looks.
+
+**Why `@Transactional` in the webhook service but not in `CheckoutService`?**
+I said: two tables, both writes must succeed or roll back together. Correct for *why it's
+needed*. Missing: *why it's safe here*: the webhook does **no external API calls**, only fast
+DB work, so the transaction is short. `CheckoutService` calls Stripe (slow, can hang):
+holding a DB transaction/connection open blocks the pool, and a rollback can't undo Stripe.
+Rule: transactions for DB-only work, never around another company's API.
+
+## M4 (continued)
 **session_id vs order_id on the pages?**
 Right: session ids are long and random (unguessable); order ids are sequential, so anyone
 can try the next one (**enumeration**).

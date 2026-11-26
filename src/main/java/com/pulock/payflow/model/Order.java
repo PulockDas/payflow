@@ -49,6 +49,10 @@ public class Order {
     @Column(unique = true)
     private String stripeCheckoutSessionId;
 
+    // Stripe PaymentIntent id ("pi_..."): the actual payment; refunds are made against it.
+    @Column(unique = true)
+    private String stripePaymentIntentId;
+
     protected Order() {
     }
 
@@ -70,7 +74,14 @@ public class Order {
         this.stripeCheckoutSessionId = checkoutSessionId;
     }
 
-    // Status changes (PAID, REFUNDED, ...) come in M5/M6.
+    // Can be set only once.
+    public void attachStripePaymentIntent(String paymentIntentId) {
+        if (this.stripePaymentIntentId != null) {
+            throw new IllegalStateException(
+                    "Order " + id + " already has a Stripe PaymentIntent");
+        }
+        this.stripePaymentIntentId = paymentIntentId;
+    }
 
     public Long getId() {
         return id;
@@ -104,6 +115,10 @@ public class Order {
         return stripeCheckoutSessionId;
     }
 
+    public String getStripePaymentIntentId() {
+        return stripePaymentIntentId;
+    }
+
     public void markCancelled() {
         if (this.status != OrderStatus.PENDING) {
             throw new IllegalStateException(
@@ -118,5 +133,14 @@ public class Order {
                     "Order " + id + " cannot be marked as paid because it is " + status);
         }
         this.status = OrderStatus.PAID;
+    }
+
+    public void markRefunded() {
+        if (this.status != OrderStatus.PAID) {
+            throw new IllegalStateException(
+                "Order " + id + " cannot be marked as refunded because it is " + status
+            );
+        }
+        this.status = OrderStatus.REFUNDED;
     }
 }

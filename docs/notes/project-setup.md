@@ -55,6 +55,25 @@ Run from the project root (PowerShell uses `.\mvnw.cmd`; Linux/Mac/Git Bash use 
 - **`-Dname=value`** sets a property, e.g. `-Dincludes=com.stripe` filters the tree.
   In PowerShell, wrap it in quotes so the `.` / `=` aren't misread.
 
+## VS Code tasks and launch configs
+A task is just a **terminal command with a name**, stored in `.vscode/tasks.json`.
+1. VS Code reads `.vscode/tasks.json` when the folder opens; each `"label"` becomes a menu item.
+2. `Ctrl+Shift+P` -> **Tasks: Run Task** lists them.
+3. `"type": "shell"` -> runs `"command"` in a terminal with the default shell (PowerShell).
+4. Placeholders are filled first: `${input:orderId}` shows an input box (from `"inputs"`,
+   `"password": true` hides typing); `${workspaceFolder}` = the project folder.
+
+| Field | Does |
+|---|---|
+| `dependsOn` + `"dependsOrder": "sequence"` | Run other tasks first, in order |
+| `"isBackground": true` | For never-ending commands (`stripe listen`); don't wait for exit |
+| `problemMatcher.background.endsPattern: "Ready!"` | When this text appears, treat the task as started and continue |
+| `"presentation"` | Which terminal panel, show it or not |
+
+`launch.json` -> `"preLaunchTask": "dev: env"` runs that task before starting the app
+(one click = Postgres -> Stripe forwarder -> app). Any `"command"` can be pasted into a
+terminal by hand with the same result.
+
 ## The Twelve-Factor App
 
 A set of 12 rules (12factor.net) for apps that are easy to deploy and scale.

@@ -26,3 +26,5 @@ stripe:
 # Public URL of this app; Stripe redirects customers back here after checkout.
 app:
   base-url: ${APP_BASE_URL:http://localhost:8080}
+  # Shared secret for admin endpoints (refunds), sent as the X-Admin-Token header. No default.
+  admin-token: ${ADMIN_API_TOKEN}

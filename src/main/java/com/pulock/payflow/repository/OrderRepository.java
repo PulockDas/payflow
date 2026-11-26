@@ -13,6 +13,9 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @EntityGraph(attributePaths = "product")
     Optional<Order> findByStripeCheckoutSessionId(String stripeCheckoutSessionId);
 
+    // Used by the charge.refunded webhook (it only knows the payment intent).
+    Optional<Order> findByStripePaymentIntentId(String stripePaymentIntentId);
+
     // "WithProduct" is just a readable label: Spring ignores words between find...By.
     @EntityGraph(attributePaths = "product")
     Optional<Order> findWithProductById(Long orderId);

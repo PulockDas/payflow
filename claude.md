@@ -20,7 +20,13 @@ one plain HTML page as the shop. Build tool: Maven.
 - M8 GitHub polish + resume
 
 ## Current status
-- M0-M5 done, committed and pushed to GitHub (private: PulockDas/payflow). Next: M6.
+- M0-M5 done, committed and pushed to GitHub (private: PulockDas/payflow).
+- M6 code written, NOT yet tested or committed: `POST /api/orders/{id}/refund`
+  (`refund/RefundController` checks `X-Admin-Token` vs `ADMIN_API_TOKEN`, constant-time;
+  `refund/RefundService` -> `Refund.create` with idempotency key `refund-order-{id}`,
+  returns 202, does NOT change status). `charge.refunded` webhook (Charge object, fully
+  refunded only) -> `markRefunded()`. Order stores `stripePaymentIntentId` (set when PAID).
+  `stripe listen --events` now includes `charge.refunded`. Next: test M6, quiz, commit.
 - Webhook (M5): `POST /api/stripe/webhook`. `webhook/StripeWebhookController` verifies
   the signature on the raw body (400 if invalid). `webhook/StripeWebhookService` (I wrote
   it) is `@Transactional`: skip if event id in `processed_stripe_events`, else
