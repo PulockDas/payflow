@@ -14,18 +14,23 @@ one plain HTML page as the shop. Build tool: Maven.
 - M2 Product and Order entities, OrderStatus lifecycle, GET /api/products (done)
 - M3 POST /api/checkout creates an Order (PENDING) + Stripe Checkout Session (done)
 - M4 Success / cancel pages that READ order status from the DB (done)
-- M5 Webhook endpoint: signature verification, idempotent event handling, Order -> PAID
+- M5 Webhook endpoint: signature verification, idempotent event handling, Order -> PAID (done)
 - M6 Refunds with Stripe idempotency keys, Order -> REFUNDED
 - M7 Tests, Dockerfile, README
 - M8 GitHub polish + resume
 
 ## Current status
-- M0-M4 done and committed (one commit per milestone).
-- M5 code written and committed as WIP, NOT yet tested. Next: run the M5 test
-  checklist (VS Code launch "PayFlow (DB + Stripe + app)" + `test:` tasks), then mark
-  M5 done, quiz, and commit. Webhook: `webhook/StripeWebhookController` (signature
-  check) + `webhook/StripeWebhookService` (I wrote it: idempotency via
-  `processed_stripe_events` + `saveAndFlush`, completed -> PAID, expired -> CANCELLED).
+- M0-M5 done, committed and pushed to GitHub (private: PulockDas/payflow). Next: M6.
+- Webhook (M5): `POST /api/stripe/webhook`. `webhook/StripeWebhookController` verifies
+  the signature on the raw body (400 if invalid). `webhook/StripeWebhookService` (I wrote
+  it) is `@Transactional`: skip if event id in `processed_stripe_events`, else
+  `saveAndFlush` the event id first (entity implements `Persistable` -> plain INSERT),
+  then `checkout.session.completed` + paid + amount matches -> `markPaid()`;
+  `checkout.session.expired` -> `markCancelled()` if PENDING. Unrecoverable cases
+  (unknown session, wrong state, amount mismatch) log and return 200, so Stripe stops retrying.
+- Local webhooks: `stripe listen --events checkout.session.completed,checkout.session.expired
+  --forward-to localhost:8080/api/stripe/webhook`; `.env` STRIPE_WEBHOOK_SECRET must equal
+  `stripe listen --print-secret`.
 - Frontend: static files in `resources/static/` (no template engine): `index.html`
   (shop), `checkout/success.html` (polls every 2s, max 15, while PENDING),
   `checkout/cancel.html`. DOM built with `textContent`, never `innerHTML`.
@@ -40,13 +45,14 @@ one plain HTML page as the shop. Build tool: Maven.
   the order stores `stripeCheckoutSessionId` (unique) for the M5 webhook lookup.
 - Return URLs: `/checkout/success.html?session_id={CHECKOUT_SESSION_ID}` and
   `/checkout/cancel.html?order_id=...` (static pages in `resources/static/checkout/`).
-- `Order` status methods so far: `markCancelled()` (PENDING only, I wrote it; used when
-  Stripe session creation fails). PAID/REFUNDED transitions: I write them in M5/M6.
+- `Order` status methods (I wrote them): `markCancelled()` and `markPaid()`, both
+  PENDING only. REFUNDED transition: I write it in M6.
 - Config: `application.yml` imports `.env` via `spring.config.import`;
   `StripeConfig` sets `Stripe.apiKey` at startup.
 - Dev env: Windows + PowerShell (use PowerShell syntax in commands).
-- Run: VS Code launch config "PayFlow (DB + app)", or
-  `docker compose up -d` then `.\mvnw.cmd spring-boot:run`.
+- Run: VS Code launch config "PayFlow (DB + Stripe + app)" (Postgres + `stripe listen` +
+  app; `test:` tasks for webhook checks) or "PayFlow (DB + app)". Without VS Code:
+  `docker compose up -d` then `.\mvnw.cmd spring-boot:run`. (`.vscode/` is gitignored.)
 - Reference notes in `docs/notes/`.
 
 ## How to work with me (I am learning — no vibe coding)

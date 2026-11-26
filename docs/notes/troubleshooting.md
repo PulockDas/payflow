@@ -16,6 +16,12 @@ fully** (new terminal tabs inside VS Code keep the old PATH).
 -> Newer Stripe CLI requires choosing events.
 -> `stripe listen --events checkout.session.completed,checkout.session.expired --forward-to localhost:8080/api/stripe/webhook`
 
+**Every webhook -> `Rejected Stripe webhook: invalid signature` (400), even on a real payment**
+-> `STRIPE_WEBHOOK_SECRET` in `.env` was a *different* secret than the one `stripe listen`
+signs with (e.g. from a dashboard endpoint or an older login). Both start with `whsec_`.
+-> `stripe listen --print-secret`, put that value in `.env`, **restart the app** (`.env` is
+read only at startup). Then pay again or `stripe events resend evt_...`.
+
 **`docker compose ...` -> "failed to connect to the docker API at npipe://..."**
 -> Docker Desktop isn't running.
 -> Start Docker Desktop, wait for "running".
