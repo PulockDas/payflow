@@ -15,18 +15,18 @@ one plain HTML page as the shop. Build tool: Maven.
 - M3 POST /api/checkout creates an Order (PENDING) + Stripe Checkout Session (done)
 - M4 Success / cancel pages that READ order status from the DB (done)
 - M5 Webhook endpoint: signature verification, idempotent event handling, Order -> PAID (done)
-- M6 Refunds with Stripe idempotency keys, Order -> REFUNDED
+- M6 Refunds with Stripe idempotency keys, Order -> REFUNDED (done)
 - M7 Tests, Dockerfile, README
 - M8 GitHub polish + resume
 
 ## Current status
-- M0-M5 done, committed and pushed to GitHub (private: PulockDas/payflow).
-- M6 code written, NOT yet tested or committed: `POST /api/orders/{id}/refund`
+- M0-M6 done and tested, pushed to GitHub (private: PulockDas/payflow). Next: M7.
+- Refunds (M6): `POST /api/orders/{id}/refund`
   (`refund/RefundController` checks `X-Admin-Token` vs `ADMIN_API_TOKEN`, constant-time;
   `refund/RefundService` -> `Refund.create` with idempotency key `refund-order-{id}`,
   returns 202, does NOT change status). `charge.refunded` webhook (Charge object, fully
   refunded only) -> `markRefunded()`. Order stores `stripePaymentIntentId` (set when PAID).
-  `stripe listen --events` now includes `charge.refunded`. Next: test M6, quiz, commit.
+  `stripe listen --events` includes `charge.refunded`.
 - Webhook (M5): `POST /api/stripe/webhook`. `webhook/StripeWebhookController` verifies
   the signature on the raw body (400 if invalid). `webhook/StripeWebhookService` (I wrote
   it) is `@Transactional`: skip if event id in `processed_stripe_events`, else
@@ -34,7 +34,7 @@ one plain HTML page as the shop. Build tool: Maven.
   then `checkout.session.completed` + paid + amount matches -> `markPaid()`;
   `checkout.session.expired` -> `markCancelled()` if PENDING. Unrecoverable cases
   (unknown session, wrong state, amount mismatch) log and return 200, so Stripe stops retrying.
-- Local webhooks: `stripe listen --events checkout.session.completed,checkout.session.expired
+- Local webhooks: `stripe listen --events checkout.session.completed,checkout.session.expired,charge.refunded
   --forward-to localhost:8080/api/stripe/webhook`; `.env` STRIPE_WEBHOOK_SECRET must equal
   `stripe listen --print-secret`.
 - Frontend: static files in `resources/static/` (no template engine): `index.html`
@@ -45,16 +45,20 @@ one plain HTML page as the shop. Build tool: Maven.
   `@EntityGraph(attributePaths = "product")`.
 - Decisions: Spring Boot 4.2 (no 3.x offered by Initializr), Java 21, Stripe
   sandbox account, `ddl-auto: update` (no Flyway/Liquibase).
-- Service layer: only `checkout/CheckoutService` (DB + Stripe). No `@Transactional`
+- Service layer: `checkout/CheckoutService` and `refund/RefundService` (DB + Stripe),
+  `webhook/StripeWebhookService` (DB only, `@Transactional`). No `@Transactional`
   around Stripe calls (don't hold a DB transaction during an external API call).
+- Logging: `info` normal flow, `warn` unusual but harmless / client mistakes, `error`
+  only when a human must act.
 - Stripe Session uses inline `price_data` from our DB, `client_reference_id` = order id;
   the order stores `stripeCheckoutSessionId` (unique) for the M5 webhook lookup.
 - Return URLs: `/checkout/success.html?session_id={CHECKOUT_SESSION_ID}` and
   `/checkout/cancel.html?order_id=...` (static pages in `resources/static/checkout/`).
-- `Order` status methods (I wrote them): `markCancelled()` and `markPaid()`, both
-  PENDING only. REFUNDED transition: I write it in M6.
+- `Order` status methods (I wrote them): `markCancelled()` and `markPaid()` (PENDING
+  only), `markRefunded()` (PAID only).
 - Config: `application.yml` imports `.env` via `spring.config.import`;
-  `StripeConfig` sets `Stripe.apiKey` at startup.
+  `StripeConfig` sets `Stripe.apiKey` at startup. Secrets in `.env`: DB_*,
+  STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, ADMIN_API_TOKEN (no defaults; APP_BASE_URL optional).
 - Dev env: Windows + PowerShell (use PowerShell syntax in commands).
 - Run: VS Code launch config "PayFlow (DB + Stripe + app)" (Postgres + `stripe listen` +
   app; `test:` tasks for webhook checks) or "PayFlow (DB + app)". Without VS Code:

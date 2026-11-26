@@ -33,10 +33,12 @@ public class RefundService {
                         HttpStatus.NOT_FOUND, "Order " + orderId + " not found"));
 
         if (order.getStatus() != OrderStatus.PAID) {
+            log.warn("Order id: {} status isn't paid so that it can be returned", orderId);
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Order " + orderId + " is " + order.getStatus() + "; only PAID orders can be refunded");
         }
         if (order.getStripePaymentIntentId() == null) {
+            log.warn("Order id: {} doesn't have any payment intent id", orderId);
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Order " + orderId + " has no Stripe PaymentIntent recorded");
         }
