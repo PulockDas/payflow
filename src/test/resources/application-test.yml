@@ -1,0 +1,17 @@
+# Settings for the "test" profile. Activated in a test class with @ActiveProfiles("test").
+# Spring loads application.yml first, then this file. Keys set here override it.
+#
+# Everything below is FAKE on purpose: tests must never use real keys or call real Stripe.
+# These values are not secrets, so they can be committed.
+
+stripe:
+  secret-key: sk_test_dummy_not_a_real_key
+  # Tests sign their own fake webhook events with this secret (StripeTestSigner, step 5).
+  webhook-secret: whsec_test_secret
+
+app:
+  base-url: http://localhost:8080
+  admin-token: test-admin-token
+
+# No spring.datasource here: @ServiceConnection on the Testcontainers Postgres
+# supplies the URL, username and password at runtime (step 4).

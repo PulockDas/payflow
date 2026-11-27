@@ -20,7 +20,14 @@ one plain HTML page as the shop. Build tool: Maven.
 - M8 GitHub polish + resume
 
 ## Current status
-- M0-M6 done and tested, pushed to GitHub (private: PulockDas/payflow). Next: M7.
+- M0-M6 done and tested, pushed to GitHub (PulockDas/payflow). M7 in progress.
+- M7 done so far (steps 1-6): Testcontainers deps; `src/test/resources/application-test.yml`
+  (fake secrets, `@ActiveProfiles("test")`); `model/OrderTest` (unit); `TestcontainersConfiguration`
+  (`@ServiceConnection` postgres:16 bean, `@Import` it); `webhook/StripeTestSigner` (HMAC-signed
+  test webhooks); `webhook/StripeWebhookIntegrationTest` (7 tests). 16 tests pass.
+  Open nit: test 2 should also assert the stored PaymentIntent id.
+  Remaining: step 7 `refund/RefundControllerIntegrationTest` (401/404/409), 8 `.dockerignore`,
+  9 `Dockerfile` (multi-stage, non-root), 10 compose `app` service, 11 README update.
 - Refunds (M6): `POST /api/orders/{id}/refund`
   (`refund/RefundController` checks `X-Admin-Token` vs `ADMIN_API_TOKEN`, constant-time;
   `refund/RefundService` -> `Refund.create` with idempotency key `refund-order-{id}`,
