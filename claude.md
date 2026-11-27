@@ -16,18 +16,21 @@ one plain HTML page as the shop. Build tool: Maven.
 - M4 Success / cancel pages that READ order status from the DB (done)
 - M5 Webhook endpoint: signature verification, idempotent event handling, Order -> PAID (done)
 - M6 Refunds with Stripe idempotency keys, Order -> REFUNDED (done)
-- M7 Tests, Dockerfile, README
+- M7 Tests, Dockerfile, README (done)
 - M8 GitHub polish + resume
 
 ## Current status
-- M0-M6 done and tested, pushed to GitHub (PulockDas/payflow). M7 in progress.
-- M7 done so far (steps 1-6): Testcontainers deps; `src/test/resources/application-test.yml`
-  (fake secrets, `@ActiveProfiles("test")`); `model/OrderTest` (unit); `TestcontainersConfiguration`
-  (`@ServiceConnection` postgres:16 bean, `@Import` it); `webhook/StripeTestSigner` (HMAC-signed
-  test webhooks); `webhook/StripeWebhookIntegrationTest` (7 tests). 16 tests pass.
-  Open nit: test 2 should also assert the stored PaymentIntent id.
-  Remaining: step 7 `refund/RefundControllerIntegrationTest` (401/404/409), 8 `.dockerignore`,
-  9 `Dockerfile` (multi-stage, non-root), 10 compose `app` service, 11 README update.
+- M0-M7 done, on GitHub (PulockDas/payflow, public). Next: M8.
+- Tests (M7): `.\mvnw.cmd test` (needs Docker Desktop), 22 tests. `src/test/resources/application-test.yml`
+  (fake secrets, `@ActiveProfiles("test")`); `TestcontainersConfiguration` (`@ServiceConnection`
+  postgres:16 bean, `@Import` it; same annotations -> cached context shared); `model/OrderTest` (unit);
+  `webhook/StripeTestSigner` (HMAC-signed test webhooks) + `StripeWebhookIntegrationTest`;
+  `refund/RefundControllerIntegrationTest` (401/404/409, no Stripe calls).
+  Open nit: webhook test 2 should also assert the stored PaymentIntent id.
+- Docker (M7): multi-stage `Dockerfile` (JDK build, JRE run, non-root, `-DskipTests`);
+  `.dockerignore` excludes `.env`. Compose `app` service behind profile `full`:
+  `docker compose up` = db only (VS Code flow); `docker compose --profile full up -d --build` = db + app
+  (`DB_HOST: db`). Env changes need `--force-recreate app`, not restart.
 - Refunds (M6): `POST /api/orders/{id}/refund`
   (`refund/RefundController` checks `X-Admin-Token` vs `ADMIN_API_TOKEN`, constant-time;
   `refund/RefundService` -> `Refund.create` with idempotency key `refund-order-{id}`,

@@ -8,9 +8,9 @@ The focus is on getting payments right, not on having many features:
 - webhook events are processed **exactly once**, even when Stripe delivers them more than once
 - refunds use **idempotency keys**, so retrying a request never refunds twice
 
-> **Status: in progress.** Checkout, webhooks and refunds work and have been tested
-> by hand against the Stripe sandbox. Automated tests and Docker packaging are being
-> added now (see [Roadmap](#roadmap)).
+> **Status: in progress.** Checkout, webhooks and refunds work against the Stripe
+> sandbox. The project has 22 automated tests against a real PostgreSQL and runs fully in
+> Docker. Final polish is still to come (see [Roadmap](#roadmap)).
 
 ## Tech stack
 
@@ -20,7 +20,8 @@ The focus is on getting payments right, not on having many features:
 | Database | PostgreSQL 16 (Docker Compose) |
 | Payments | Stripe Java SDK, Stripe Checkout, Stripe webhooks, Stripe CLI |
 | Frontend | One static HTML shop page with plain JavaScript |
-| Build | Maven (wrapper included) |
+| Testing | JUnit 5, AssertJ, MockMvc, Testcontainers (PostgreSQL) |
+| Build / run | Maven (wrapper included), Docker (multi-stage image), Docker Compose |
 
 ## How a payment works
 
@@ -141,6 +142,66 @@ On macOS or Linux, use `./mvnw spring-boot:run`.
 
    After the `charge.refunded` webhook arrives, `GET /api/orders/1` shows `REFUNDED`.
 
+## Run everything in Docker
+
+You don't need Java installed for this, only Docker and the Stripe CLI. Steps 1 and 3
+above still apply (`.env` and `stripe listen`).
+
+```powershell
+docker compose --profile full up -d --build   # build the image, start the db and the app
+docker compose logs -f app                    # follow the app log
+docker compose --profile full down            # stop both
+```
+
+- Plain `docker compose up` starts **only the database**, for running the app from your
+  IDE. The `app` service sits behind the `full` profile so the two don't fight over port 8080.
+- Inside the Compose network the app reaches Postgres as `db`, not `localhost`.
+  Inside a container, `localhost` means the container itself.
+- The image is a multi-stage build: a JDK stage compiles the jar, and a JRE-only stage runs
+  it as a non-root user. No secrets are in the image. `.env` is excluded by
+  `.dockerignore` and passed in only when the container starts.
+
+To build and run the image without Compose, against the Compose database:
+
+```powershell
+docker build -t payflow:local .
+docker run --rm --env-file .env -e DB_HOST=host.docker.internal -p 8080:8080 payflow:local
+```
+
+## Running the tests
+
+```powershell
+.\mvnw.cmd test
+```
+
+Docker Desktop must be running. The integration tests start a throwaway PostgreSQL 16
+container with Testcontainers. They don't need `.env` and never call Stripe: they use the
+fake values in `src/test/resources/application-test.yml`.
+
+| Test class | What it covers |
+|------------|----------------|
+| `OrderTest` | Order status rules (unit tests, no Spring) |
+| `PayflowApplicationTests` | The whole application context starts |
+| `StripeWebhookIntegrationTest` | Real signature check with events signed in the test; PAID / CANCELLED / REFUNDED; duplicate events processed once; amount mismatch and partial refunds ignored |
+| `RefundControllerIntegrationTest` | 401 without a valid admin token (checked before the order lookup), 404 for an unknown order, 409 for orders that can't be refunded |
+
+Not covered automatically: creating a real Checkout Session and a real refund. Both call
+the Stripe API and were tested by hand in the Stripe sandbox.
+
+## Troubleshooting
+
+**Every webhook is rejected with `400` ("invalid signature")**
+
+`STRIPE_WEBHOOK_SECRET` in `.env` doesn't match the secret `stripe listen` signs with.
+The CLI's secret changes when its login is renewed (`stripe login`, or when the CLI key
+expires), so a value that used to work can go stale.
+
+1. Run `stripe listen --print-secret` and copy the value into `.env`.
+2. Restart the app, because `.env` is only read at startup. If the app runs in Docker, a
+   plain restart keeps the old value, so recreate the container instead:
+   `docker compose --profile full up -d --force-recreate app`.
+3. Pay again, or re-send the failed event: `stripe events resend evt_...`.
+
 ## Roadmap
 
 - [x] Products, orders and the order status lifecycle
@@ -148,8 +209,9 @@ On macOS or Linux, use `./mvnw spring-boot:run`.
 - [x] Success and cancel pages that read the status from the database
 - [x] Webhook with signature verification and idempotent event handling
 - [x] Refunds with idempotency keys
-- [ ] Automated tests (JUnit 5, MockMvc, Testcontainers PostgreSQL, signed test webhooks)
-- [ ] Dockerfile and a full `docker compose up` setup
+- [x] Automated tests (JUnit 5, MockMvc, Testcontainers PostgreSQL, signed test webhooks)
+- [x] Dockerfile and a full Docker Compose setup
+- [ ] CI: run the tests on every push (GitHub Actions)
 - [ ] Database migrations (Flyway) to replace `ddl-auto: update`
 
 ## Notes

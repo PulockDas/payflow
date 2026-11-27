@@ -1,0 +1,22 @@
+# Files Docker must NOT send to the build (like .gitignore, but for `docker build`).
+# Anything not listed here could be copied into the image by the Dockerfile.
+
+# Secrets: never inside an image. Real values are passed when the container starts.
+.env
+.env.*
+!.env.example
+
+# Build output: the Dockerfile builds the jar itself, from source.
+target/
+
+# Not needed to build or run the app.
+.git/
+.gitignore
+.gitattributes
+.vscode/
+.idea/
+docs/
+*.md
+docker-compose.yml
+Dockerfile
+.dockerignore

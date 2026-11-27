@@ -19,8 +19,13 @@ fully** (new terminal tabs inside VS Code keep the old PATH).
 **Every webhook -> `Rejected Stripe webhook: invalid signature` (400), even on a real payment**
 -> `STRIPE_WEBHOOK_SECRET` in `.env` was a *different* secret than the one `stripe listen`
 signs with (e.g. from a dashboard endpoint or an older login). Both start with `whsec_`.
+Happened again in M7: the CLI's signing secret **changes when the CLI login is renewed**
+(`stripe login`, or its key expiring), so a `.env` that worked before silently goes stale.
 -> `stripe listen --print-secret`, put that value in `.env`, **restart the app** (`.env` is
 read only at startup). Then pay again or `stripe events resend evt_...`.
+-> App in Docker (`--profile full`): a plain `restart` keeps the OLD env. Recreate it:
+`docker compose --profile full up -d --force-recreate app`.
+-> Quick check: `docker exec payflow-app printenv STRIPE_WEBHOOK_SECRET` vs `--print-secret`.
 
 **`docker compose ...` -> "failed to connect to the docker API at npipe://..."**
 -> Docker Desktop isn't running.

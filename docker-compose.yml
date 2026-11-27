@@ -18,5 +18,21 @@ services:
       timeout: 3s
       retries: 10
 
+  # The PayFlow app itself, built from our Dockerfile.
+  # Behind the "full" profile, so plain `docker compose up` (and the VS Code task)
+  # still starts ONLY the db. Start both with: docker compose --profile full up -d --build
+  app:
+    profiles: ["full"]
+    build: .
+    container_name: payflow-app
+    env_file: .env          # secrets passed at runtime, never baked into the image
+    environment:
+      DB_HOST: db           # service name on the Compose network (inside a container, localhost = itself)
+    ports:
+      - "8080:8080"         # so the browser and `stripe listen` on Windows reach it at localhost:8080
+    depends_on:
+      db:
+        condition: service_healthy   # wait for the pg_isready healthcheck above
+
 volumes:
   payflow-db-data:
